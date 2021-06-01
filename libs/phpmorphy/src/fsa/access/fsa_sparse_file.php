@@ -26,43 +26,42 @@
 class phpMorphy_Fsa_Sparse_File extends phpMorphy_Fsa {
     function walk($trans, $word, $readAnnot = true) {
         $__fh = $this->resource; $fsa_start = $this->fsa_start;
-        
+
         for($i = 0, $c = $GLOBALS['__phpmorphy_strlen']($word); $i < $c; $i++) {
             $prev_trans = $trans;
-            $char = ord($word[$i]);
-            
+            $char = mb_ord($word[$i]);
             /////////////////////////////////
             // find char in state begin
 			// sparse version
 			$result = true;
-			fseek($__fh, $fsa_start + (((($trans >> 10) & 0x3FFFFF) + $char + 1) << 2)); 
+			fseek($__fh, $fsa_start + (((($trans >> 10) & 0x3FFFFF) + $char + 1) << 2));
 			list(, $trans) = unpack('V', fread($__fh, 4));
-			
+
 			if(($trans & 0x0200) || ($trans & 0xFF) != $char) {
 				$result = false;
 			}
             // find char in state end
             /////////////////////////////////
-            
+
             if(!$result) {
                 $trans = $prev_trans;
                 break;
             }
         }
-        
+
         $annot = null;
         $result = false;
         $prev_trans = $trans;
-        
+
         if($i >= $c) {
             // Read annotation when we walked all chars in word
             $result = true;
-            
+
             if($readAnnot) {
                 // read annot trans
-                fseek($__fh, $fsa_start + ((($trans >> 10) & 0x3FFFFF) << 2)); 
+                fseek($__fh, $fsa_start + ((($trans >> 10) & 0x3FFFFF) << 2));
                 list(, $trans) = unpack('V', fread($__fh, 4));
-                
+
                 if(0 == ($trans & 0x0100)) {
                     $result = false;
                 } else {
@@ -70,7 +69,6 @@ class phpMorphy_Fsa_Sparse_File extends phpMorphy_Fsa {
                 }
             }
         }
-        
         return array(
             'result' => $result,
             'last_trans' => $trans,
@@ -79,31 +77,31 @@ class phpMorphy_Fsa_Sparse_File extends phpMorphy_Fsa {
             'annot' => $annot
         );
     }
-    
+
     function collect($startNode, $callback, $readAnnot = true, $path = '') {
         $total = 0;
-        
+
         $stack = array();
         $stack_idx = array();
         $start_idx = 0;
         array_push($stack, null);
         array_push($stack_idx, null);
-        
+
         $state = $this->readState((($startNode) >> 10) & 0x3FFFFF);
-        
+
         do {
             for($i = $start_idx, $c = count($state); $i < $c; $i++) {
                 $trans = $state[$i];
-                
+
                 if(($trans & 0x0100)) {
                     $total++;
-                    
+
                     if($readAnnot) {
                         $annot = $this->getAnnot($trans);
                     } else {
                         $annot = $trans;
                     }
-                    
+
                     if(!call_user_func($callback, $path, $annot)) {
                         return $total;
                     }
@@ -113,42 +111,42 @@ class phpMorphy_Fsa_Sparse_File extends phpMorphy_Fsa {
                     array_push($stack_idx, $i + 1);
                     $state = $this->readState((($trans) >> 10) & 0x3FFFFF);
                     $start_idx = 0;
-                    
+
                     break;
                 }
             }
-            
+
             if($i >= $c) {
                 $state = array_pop($stack);
                 $start_idx = array_pop($stack_idx);
                 $path = $GLOBALS['__phpmorphy_substr']($path, 0, -1);
             }
         } while(!empty($stack));
-        
+
         return $total;
     }
-    
+
     function readState($index) {
         $__fh = $this->resource; $fsa_start = $this->fsa_start;
-        
+
         $result = array();
-        
+
         $start_offset = $fsa_start + (($index) << 2);
-        
+
         // first try read annot transition
-        fseek($__fh, $start_offset); 
+        fseek($__fh, $start_offset);
         list(, $trans) = unpack('V', fread($__fh, 4));
-        
+
         if(($trans & 0x0100)) {
             $result[] = $trans;
         }
-        
+
         // read rest
         $start_offset += 4;
         foreach($this->getAlphabetNum() as $char) {
-            fseek($__fh, $start_offset + (($char) << 2)); 
+            fseek($__fh, $start_offset + (($char) << 2));
             list(, $trans) = unpack('V', fread($__fh, 4));
-            
+
 //            if(!($trans & 0x0200) && ($trans & 0xFF) == $char) {
 // TODO: check term and empty flags at once i.e. $trans & 0x0300
             if(!(($trans & 0x0200) || ($trans & 0x0100)) && ($trans & 0xFF) == $char) {
@@ -156,14 +154,14 @@ class phpMorphy_Fsa_Sparse_File extends phpMorphy_Fsa {
                 $result[] = $trans;
             }
         }
-        
+
         return $result;
     }
-    
+
     function unpackTranses($rawTranses) {
         settype($rawTranses, 'array');
         $result = array();
-        
+
         foreach($rawTranses as $rawTrans) {
             $result[] = array(
 				'term'  => ($rawTrans & 0x0100) ? true : false,
@@ -172,55 +170,55 @@ class phpMorphy_Fsa_Sparse_File extends phpMorphy_Fsa {
 				'dest'  => (($rawTrans) >> 10) & 0x3FFFFF,
 			);
         }
-        
+
         return $result;
     }
-    
+
     protected function readRootTrans() {
         $__fh = $this->resource; $fsa_start = $this->fsa_start;
 
-        fseek($__fh, $fsa_start + 4); 
+        fseek($__fh, $fsa_start + 4);
         list(, $trans) = unpack('V', fread($__fh, 4));
-        
+
         return $trans;
     }
-    
+
     protected function readAlphabet() {
         $__fh = $this->resource; $fsa_start = $this->fsa_start;
-        
-        fseek($__fh, $this->header['alphabet_offset']); 
+
+        fseek($__fh, $this->header['alphabet_offset']);
         return fread($__fh, $this->header['alphabet_size']);
     }
-    
+
     function getAnnot($trans) {
         if(!($trans & 0x0100)) {
             return null;
         }
-        
+
         $__fh = $this->resource; $fsa_start = $this->fsa_start;
-        
+
         $offset =
             $this->header['annot_offset'] +
             ((($trans & 0xFF) << 22) | (($trans >> 10) & 0x3FFFFF));
-        
-        fseek($__fh, $offset); 
+
+        fseek($__fh, $offset);
         $len = ord(fread($__fh, 1));
-        
+
         if($len) {
             $annot = fread($__fh, $len);
         } else {
             $annot = null;
         }
-        
+
         return $annot;
     }
-    
+
 	function getAlphabetNum() {
 		if(!isset($this->alphabet_num)) {
 			$this->alphabet_num = array_map('ord', $this->getAlphabet());
 		}
-		
+
 		return $this->alphabet_num;
 	}
-	protected $alphabet_num; 
+	protected $alphabet_num;
 }

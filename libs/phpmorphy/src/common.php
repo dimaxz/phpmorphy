@@ -540,11 +540,14 @@ class phpMorphy {
 
                     $result[$word] = $this->predictWord($method, $word);
                 }
-            } else {
+            }
+
+            if(isset($not_found)){
                 for($i = 0, $c = count($not_found); $i < $c; $i++) {
                     $result[$not_found[$i]] = false;
                 }
             }
+
 
             return $result;
         } else {
@@ -559,6 +562,7 @@ class phpMorphy {
     }
 
     protected function predictWord($method, $word) {
+
         if(false !== ($result = $this->__predict_by_suf_morphier->$method($word))) {
             $this->last_prediction_type = self::PREDICT_BY_SUFFIX;
 
